@@ -1,0 +1,2 @@
+.
+-DCATKIN_DEVEL_PREFIX=/home/alexander/ivr_assignment/devel -DCMAKE_INSTALL_PREFIX=/home/alexander/ivr_assignment/install -G Unix Makefiles
