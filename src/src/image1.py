@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 
-import roslib
 import sys
+import roslib
 import rospy
 import cv2
+import move
 import numpy as np
-from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray, Float64
 from cv_bridge import CvBridge, CvBridgeError
 
+BLUE = [(100, 0, 0), (255, 0, 0)]
+GREEN = [(0, 100, 0), (0, 255, 0)]
+RED = [(0, 0, 100), (0, 0, 255)]
+YELLOW = [(0, 100, 100), (0, 255, 255)]
+ORANGE = [(0, 51, 102), (0, 128, 255)]
 
 class image_converter:
 
@@ -24,6 +29,54 @@ class image_converter:
     # initialize the bridge between openCV and ROS
     self.bridge = CvBridge()
 
+    # need this to move the joints 
+    self.mover = move.Mover()
+
+    self.joints = {
+            'joint_2': {
+                'pos': np.array([0.0, 0.0]),
+                'colour': BLUE
+                },
+            'joint_4': {
+                'pos': np.array([0.0, 0.0]),
+                'colour': GREEN
+                },
+            'end_effector': {
+                'pos': np.array([0.0, 0.0]),
+                'colour': RED
+                }
+            }
+
+    
+    
+    # either joint 2 or 3 is fixed in this camera. figure out which one 
+    # self.joint3_pos = {'cx': 0.0, 'cy': 0.0}
+    # self.joint3_colour = BLUE
+
+    self.joint4_pos = {'cx': 0.0, 'cy': 0.0}
+    self.joint4_colour = RED
+
+    # detect the joints 
+  def detect_joint_pos(self, image, joint_name):
+    
+    colour = self.joints[joint_name]['colour']
+    prev_pos = np.array(self.joints[joint_name]['pos'])
+
+    mask = cv2.inRange(image, colour[0], colour[1])
+    kernel = np.ones((5, 5), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=3)
+    M = cv2.moments(mask)
+
+    if M['m00'] == 0:
+        # joint is hidden behind another joint. Return the last known position
+        # and let the other script figure it out
+        print("USED PREVIOUS POSITION")
+        return prev_pos
+    cx = int(M['m10'] / M['m00'])
+    cy = int(M['m01'] / M['m00'])
+
+    self.joints[joint_name]['pos'] = np.array([cx, cy])
+    return np.array([cx, cy])
 
   # Recieve data from camera 1, process it, and publish
   def callback1(self,data):
@@ -38,6 +91,12 @@ class image_converter:
 
     im1=cv2.imshow('window1', self.cv_image1)
     cv2.waitKey(1)
+    j2_pos = self.detect_joint_pos(self.cv_image1, 'joint_2')
+    j4_pos = self.detect_joint_pos(self.cv_image1, 'joint_4')
+    ee_pos = self.detect_joint_pos(self.cv_image1, 'end_effector')
+    print(f"j2:{j2_pos}, j4: {j4_pos}, ee: {ee_pos}")
+    self.mover.move()
+
     # Publish the results
     try: 
       self.image_pub1.publish(self.bridge.cv2_to_imgmsg(self.cv_image1, "bgr8"))
@@ -47,8 +106,13 @@ class image_converter:
 # call the class
 def main(args):
   ic = image_converter()
+  # joint2_pub = rospy.Publisher('/robot/joint2_position_controller/command', std_msgs.msg.Float64, queue_size=10)
   try:
-    rospy.spin()
+      rospy.spin()
+      print("hello")
+      # for i in range(10):
+          # a = (np.pi/2)*(np.sin((np.pi/15)*i))
+          # joint2_pub.publish(std_msgs.msg.Float64(a))
   except KeyboardInterrupt:
     print("Shutting down")
   cv2.destroyAllWindows()
