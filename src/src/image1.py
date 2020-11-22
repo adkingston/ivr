@@ -1,20 +1,30 @@
 #!/usr/bin/env python3
 
+import time
 import sys
 import roslib
 import rospy
 import cv2
 import move
+from move import BLUE, RED, GREEN
 import numpy as np
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray, Float64
 from cv_bridge import CvBridge, CvBridgeError
 
-BLUE = [(100, 0, 0), (255, 0, 0)]
-GREEN = [(0, 100, 0), (0, 255, 0)]
-RED = [(0, 0, 100), (0, 0, 255)]
-YELLOW = [(0, 100, 100), (0, 255, 255)]
-ORANGE = [(0, 51, 102), (0, 128, 255)]
+class Dim: 
+    def __init__(self, label):
+        self.label = label
+        self.size = 1
+        self.stride = 1
+
+
+class Layout:
+    def __init__(self):
+        self.dim = [Dim('time'), Dim('x'), Dim('z')]
+        self.data_offset = 0
+
+LAYOUT = Layout()
 
 class image_converter:
 
@@ -34,27 +44,22 @@ class image_converter:
 
     self.joints = {
             'joint_2': {
-                'pos': np.array([0.0, 0.0]),
-                'colour': BLUE
+                'pos': np.array([0.0, 0.0, 0.0]),
+                'colour': BLUE,
+                'pub': rospy.Publisher('joint2_topic', Float64MultiArray, queue_size=10)
                 },
             'joint_4': {
-                'pos': np.array([0.0, 0.0]),
-                'colour': GREEN
+                'pos': np.array([0.0, 0.0, 0.0]),
+                'colour': GREEN,
+                'pub': rospy.Publisher('joint4_topic', Float64MultiArray, queue_size=10)
                 },
             'end_effector': {
-                'pos': np.array([0.0, 0.0]),
-                'colour': RED
+                'pos': np.array([0.0, 0.0, 0.0]),
+                'colour': RED,
+                'pub': rospy.Publisher('ee_topic', Float64MultiArray, queue_size=10)
                 }
             }
 
-    
-    
-    # either joint 2 or 3 is fixed in this camera. figure out which one 
-    # self.joint3_pos = {'cx': 0.0, 'cy': 0.0}
-    # self.joint3_colour = BLUE
-
-    self.joint4_pos = {'cx': 0.0, 'cy': 0.0}
-    self.joint4_colour = RED
 
     # detect the joints 
   def detect_joint_pos(self, image, joint_name):
@@ -70,13 +75,12 @@ class image_converter:
     if M['m00'] == 0:
         # joint is hidden behind another joint. Return the last known position
         # and let the other script figure it out
-        print("USED PREVIOUS POSITION")
         return prev_pos
     cx = int(M['m10'] / M['m00'])
     cy = int(M['m01'] / M['m00'])
 
     self.joints[joint_name]['pos'] = np.array([cx, cy])
-    return np.array([cx, cy])
+    return np.array([time.time(), cx, cy])
 
   # Recieve data from camera 1, process it, and publish
   def callback1(self,data):
@@ -94,12 +98,14 @@ class image_converter:
     j2_pos = self.detect_joint_pos(self.cv_image1, 'joint_2')
     j4_pos = self.detect_joint_pos(self.cv_image1, 'joint_4')
     ee_pos = self.detect_joint_pos(self.cv_image1, 'end_effector')
-    print(f"j2:{j2_pos}, j4: {j4_pos}, ee: {ee_pos}")
     self.mover.move()
 
     # Publish the results
     try: 
       self.image_pub1.publish(self.bridge.cv2_to_imgmsg(self.cv_image1, "bgr8"))
+      self.joints['joint_2']['pub'].publish(Float64MultiArray(LAYOUT, j2_pos))
+      self.joints['joint_4']['pub'].publish(Float64MultiArray(LAYOUT, j4_pos))
+      self.joints['end_effector']['pub'].publish(Float64MultiArray(LAYOUT, ee_pos))
     except CvBridgeError as e:
       print(e)
 
