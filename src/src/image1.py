@@ -6,7 +6,7 @@ import roslib
 import rospy
 import cv2
 import move
-from move import BLUE, RED, GREEN
+from move import BLUE, RED, GREEN, YELLOW
 import numpy as np
 from sensor_msgs.msg import Image
 from std_msgs.msg import Float64MultiArray, Float64
@@ -21,7 +21,7 @@ class Dim:
 
 class Layout:
     def __init__(self):
-        self.dim = [Dim('time'), Dim('x'), Dim('z')]
+        self.dim = [Dim('time'), Dim('y'), Dim('z')]
         self.data_offset = 0
 
 LAYOUT = Layout()
@@ -42,19 +42,25 @@ class image_converter:
     # need this to move the joints 
     self.mover = move.Mover()
 
+    # this will convert pixels to meters
+
     self.joints = {
+            'joint_1': {
+                'pos': np.array([0.0, 0.0]),
+                'colour': YELLOW
+                },
             'joint_2': {
-                'pos': np.array([0.0, 0.0, 0.0]),
+                'pos': np.array([0.0, 0.0]),
                 'colour': BLUE,
                 'pub': rospy.Publisher('joint2_topic', Float64MultiArray, queue_size=10)
                 },
             'joint_4': {
-                'pos': np.array([0.0, 0.0, 0.0]),
+                'pos': np.array([0.0, 0.0]),
                 'colour': GREEN,
                 'pub': rospy.Publisher('joint4_topic', Float64MultiArray, queue_size=10)
                 },
             'end_effector': {
-                'pos': np.array([0.0, 0.0, 0.0]),
+                'pos': np.array([0.0, 0.0]),
                 'colour': RED,
                 'pub': rospy.Publisher('ee_topic', Float64MultiArray, queue_size=10)
                 }
@@ -69,15 +75,15 @@ class image_converter:
 
     mask = cv2.inRange(image, colour[0], colour[1])
     kernel = np.ones((5, 5), np.uint8)
-    mask = cv2.dilate(mask, kernel, iterations=3)
+    mask = cv2.dilate(mask, kernel, iterations=1)
     M = cv2.moments(mask)
 
     if M['m00'] == 0:
         # joint is hidden behind another joint. Return the last known position
         # and let the other script figure it out
-        return prev_pos
-    cx = int(M['m10'] / M['m00'])
-    cy = int(M['m01'] / M['m00'])
+        return np.array([time.time(), prev_pos[0], prev_pos[1]])
+    cx = float(M['m10'] / M['m00'])
+    cy = float(M['m01'] / M['m00'])
 
     self.joints[joint_name]['pos'] = np.array([cx, cy])
     return np.array([time.time(), cx, cy])
@@ -93,11 +99,19 @@ class image_converter:
     # Uncomment if you want to save the image
     #cv2.imwrite('image_copy.png', cv_image)
 
-    im1=cv2.imshow('window1', self.cv_image1)
+    cv2.imshow('window1', self.cv_image1)
     cv2.waitKey(1)
+    
+    j1_pos = self.detect_joint_pos(self.cv_image1, 'joint_1')
     j2_pos = self.detect_joint_pos(self.cv_image1, 'joint_2')
     j4_pos = self.detect_joint_pos(self.cv_image1, 'joint_4')
     ee_pos = self.detect_joint_pos(self.cv_image1, 'end_effector')
+
+    a = pixel_to_meters(j1_pos[1], j2_pos[1], 2.5)
+    j2_pos[1] *= a
+    j4_pos[1] *= a
+    ee_pos[1] *= a
+
     self.mover.move()
 
     # Publish the results
@@ -108,6 +122,9 @@ class image_converter:
       self.joints['end_effector']['pub'].publish(Float64MultiArray(LAYOUT, ee_pos))
     except CvBridgeError as e:
       print(e)
+
+def pixel_to_meters(j1, j2, length):
+    return length/np.sqrt(np.sum(np.abs(j1-j2)**2))
 
 # call the class
 def main(args):

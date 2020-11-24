@@ -5,23 +5,93 @@ consume streams from images
 
 import time
 import rospy
+import threading
 import numpy as np
+import numpy.linalg as la
 import matplotlib.pyplot as plt
 from mpl_toolkits import mplot3d
 from std_msgs.msg import Float64MultiArray
+from sensor_msgs.msg import JointState
+
+def merge_streams(data, stream_store):
+   # if this point came in less than 0.05 seconds after the previous one
+   if len(stream_store) > 0 and data.data[0] - stream_store[-1][0] < 0.1:
+       if data.layout.dim[1].label == 'y':
+           stream_store[-1] = [
+                   stream_store[-1][0], 
+                   np.array([
+                       stream_store[-1][1][0], 
+                       data.data[1], 
+                       float((data.data[2] + stream_store[-1][1][2])/2)
+                   ])
+               ]
+       else:
+           stream_store[-1] = [
+                   stream_store[-1][0], 
+                   np.array([
+                       data.data[1], 
+                       stream_store[-1][1][1], 
+                       float((data.data[2] + stream_store[-1][1][2])/2)
+                   ])
+               ]
+       return False
+
+   else: 
+       if data.layout.dim[1].label == 'y':
+           stream_store.append([np.round(data.data[0], 2), np.array([0.0, data.data[1], data.data[2]])])
+       else:
+           stream_store.append([np.round(data.data[0], 2), np.array([data.data[1], 0.0, data.data[2]])])
+
+       return True
+
+
+def pixel_to_meter(j1, j2, link_length): 
+    dist = np.sum(np.abs(j1-j2)**2)
+    return link_length / np.sqrt(dist)
+
+def get_angles(j1, j2, link_length, axis='x'):
+
+    # want to return 2 slices, the time stamps, and the angles at each timestamp
+    # get list of timestamps
+    domain = [t[0] for t in j1]
+
+    r1 = [t[1] for t in j1]
+    r2 = [t[1] for t in j2]
+
+    if axis == 'x':
+        ind = 0
+    elif axis == 'y': 
+        ind = 1
+    else:
+        return
+
+    ran = []
+    for i in range(len(r1)):
+        x, y = r1[i], r2[i]
+        ay = (y - x)
+        theta = np.arccos(ay[ind]/np.sqrt(np.sum(ay**2)))-np.pi/2
+
+        # if ay[ind] < 0:
+            # theta = -(theta - np.pi/2.)
+        ran.append(theta)
+
+    return domain, ran
 
 class Consumer:
     def __init__(self):
         rospy.init_node("camera_consumers", anonymous=True)
+        # multiple threads are making changes to this class
+        # use a lock to prevent race conditions 
+        self.lock = threading.Lock()
 
         self.joint23_pos_est = []
-        self.joint23_pos_act = []
+        self.joint2_pos_act = [[],[]] # times, angles
+        self.joint3_pos_act = [[],[]]
 
         self.joint4_pos_est = []
-        self.joint4_pos_act = []
+        self.joint4_pos_act = [[],[]]
 
         self.ee_pos_est = []
-        self.ee_pos_act = []
 
         self.joint2_sub = rospy.Subscriber(
                 "joint2_topic", 
@@ -39,57 +109,45 @@ class Consumer:
                 "ee_topic", 
                 Float64MultiArray, 
                 self.callback_ee)
+
+        self.act_angle_sub = rospy.Subscriber(
+                "robot/joint_states",
+                JointState,
+                self.callback_actual_pos
+                )
     
     def callback2(self, data):
-        # if this point came in less than 0.05 seconds after the previous one
-        if len(self.joint23_pos_est) > 0 and data.data[0] - self.joint23_pos_est[-1][0] < 0.1:
-            print(self.joint23_pos_est[-1][0] - data.data[0])
-            if data.layout.dim[1].label == 'y':
-                self.joint23_pos_est[-1] = [
-                        self.joint23_pos_est[-1][0], 
-                        [
-                            self.joint23_pos_est[-1][1][0], 
-                            data.data[1], 
-                            int((data.data[2] + self.joint23_pos_est[-1][1][2])/2)
-                        ]
-                    ]
-            else:
-                self.joint23_pos_est[-1] = [
-                        self.joint23_pos_est[-1][0], 
-                        [
-                            data.data[1], 
-                            self.joint23_pos_est[-1][1][1], 
-                            int((data.data[2] + self.joint23_pos_est[-1][1][2])/2)
-                        ]
-                    ]
-
-        else: 
-            if data.layout.dim[1].label == 'y':
-                self.joint23_pos_est.append([data.data[0], [0.0, data.data[1], data.data[2]]])
-            else:
-                self.joint23_pos_est.append([data.data[0], [data.data[1], 0.0, data.data[2]]])
-
-        self.joint23_pos_act.append((np.pi/2)*np.sin((np.pi/15)*data.data[0]))
-
-        print(self.joint23_pos_est)
-    # print(data.data)
+        self.lock.acquire()
+        add = merge_streams(data, self.joint23_pos_est)
+        self.lock.release()
 
 
-    # def callback3(self, data):
-        # print(f"joint2: {data.data}, projection: ({data.layout.dim[1].label, data.layout.dim[2].label})")
-    
     def callback4(self, data):
-        return
-        # print(f"joint4: {data.data}, projection: ({data.layout.dim[1].label, data.layout.dim[2].label})")
+        self.lock.acquire()
+        add = merge_streams(data, self.joint4_pos_est)
+        self.lock.release()
 
 
     def callback_ee(self, data):
+        self.lock.acquire()
+        add = merge_streams(data, self.ee_pos_est)
+        self.lock.release()
         return
-        # print(f"ee: {data.data}, projection: ({data.layout.dim[1].label, data.layout.dim[2].label})")
+
+    def callback_actual_pos(self, data):
+        self.lock.acquire()
+        timestamp = time.time()
+        # print(data.position)
+        self.joint2_pos_act[0].append(timestamp)
+        self.joint2_pos_act[1].append(data.position[1])
+        self.joint3_pos_act[0].append(timestamp)
+        self.joint3_pos_act[1].append(data.position[2])
+        self.joint4_pos_act[0].append(timestamp)
+        self.joint4_pos_act[1].append(data.position[3])
+
+        self.lock.release()
 
 
-def t():
-    print("hello, world!")
 
 if __name__ == "__main__":
     c = Consumer()
@@ -98,14 +156,27 @@ if __name__ == "__main__":
         rospy.spin()
     except KeyboardInterrupt:
         print("shutting down")
-    X = [c.joint23_pos_est[x][1][0] for x in range(len(c.joint23_pos_est))]
-    Y = [c.joint23_pos_est[x][1][1] for x in range(len(c.joint23_pos_est))]
-    Z = [c.joint23_pos_est[x][1][2] for x in range(len(c.joint23_pos_est))]
 
+
+    times, est_angle_j2 = get_angles(c.joint23_pos_est, c.joint4_pos_est, 3.5, axis='x')
     plt.figure()
-    ax = plt.axes(projection='3d')
-    ax.plot3D(X, Y, Z)
+    plt.plot(times, est_angle_j2, 'b-')
+    plt.plot(c.joint2_pos_act[0], c.joint2_pos_act[1], 'r-')
+    # plt.plot(times, c.ee_pos_act, 'g-')
     plt.show()
-    print("shutting down")
+
+    times, est_angle_j3 = get_angles(c.joint23_pos_est, c.joint4_pos_est, 3.5, axis='y')
+    plt.figure()
+    plt.plot(times, est_angle_j3, 'b-')
+    plt.plot(c.joint3_pos_act[0], c.joint3_pos_act[1], 'r-')
+    plt.show()
+
+    times, est_angle_j4 = get_angles(c.joint4_pos_est, c.ee_pos_est, 3, axis='x')
+    plt.figure()
+    plt.plot(times, est_angle_j4, 'b-')
+    plt.plot(c.joint4_pos_act[0], c.joint4_pos_act[1], 'r-')
+    plt.show()
+    
+    # print("shutting down")
 
         

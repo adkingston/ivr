@@ -14,9 +14,11 @@ YELLOW = [(0, 100, 100), (0, 255, 255)]
 ORANGE = [(0, 51, 102), (0, 128, 255)]
 
 
+
 class Mover:
     """ implements the joint movements per joint for question 1 """
     def __init__(self):
+        self.start = time.time()
         self.joint2_pub = rospy.Publisher(
                 "/robot/joint2_position_controller/command",
                 Float64, queue_size=10
