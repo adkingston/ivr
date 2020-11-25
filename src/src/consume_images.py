@@ -71,8 +71,6 @@ def get_angles(j1, j2, link_length, axis='x'):
         ay = (y - x)
         theta = np.arccos(ay[ind]/np.sqrt(np.sum(ay**2)))-np.pi/2
 
-        # if ay[ind] < 0:
-            # theta = -(theta - np.pi/2.)
         ran.append(theta)
 
     return domain, ran
@@ -177,6 +175,3 @@ if __name__ == "__main__":
     plt.plot(c.joint4_pos_act[0], c.joint4_pos_act[1], 'r-')
     plt.show()
     
-    # print("shutting down")
-
-        
