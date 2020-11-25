@@ -129,9 +129,9 @@ class image_converter:
     target_pos = self.detect_target(self.cv_image2)
 
     a = pixel_to_meters(np.array([j1_pos[1], j1_pos[2]]), np.array([j3_pos[1], j3_pos[2]]), 2.5)
-    j3_pos[1] = -(a * (x0-j3_pos[1]))
-    j4_pos[1] = -(a * (x0-j4_pos[1]))
-    ee_pos[1] = -(a * (x0-ee_pos[1]))
+    j3_pos[1] = (a * (x0-j3_pos[1]))
+    j4_pos[1] = (a * (x0-j4_pos[1]))
+    ee_pos[1] = (a * (x0-ee_pos[1]))
     target_pos[1] = -(a * (x0-target_pos[1])) 
     j3_pos[2] = a * (y0 - j3_pos[2])
     j4_pos[2] = a * (y0 - j4_pos[2])
