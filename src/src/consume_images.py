@@ -53,7 +53,6 @@ def get_angles(j1, j2, link_length, axis='x'):
 
     # want to return 2 slices, the time stamps, and the angles at each timestamp
     # get list of timestamps
-    domain = [t[0] for t in j1]
 
     r1 = [t[1] for t in j1]
     r2 = [t[1] for t in j2]
@@ -62,16 +61,31 @@ def get_angles(j1, j2, link_length, axis='x'):
         ind = 0
     elif axis == 'y': 
         ind = 1
+    elif axis == 'z':
+        ind = 2
     else:
         return
 
+    domain = []
     ran = []
-    for i in range(len(r1)):
+    for i in range(min(len(r1), len(r2))):
+        domain.append(j1[i][0])
         x, y = r1[i], r2[i]
         ay = (y - x)
         theta = np.arccos(ay[ind]/np.sqrt(np.sum(ay**2)))-np.pi/2
 
+
         ran.append(theta)
+
+    return domain, ran
+
+def joint1_angle(positions):
+    r = [t[1] for t in positions]
+    domain = [t[0] for t in positions]
+    ran = []
+    for i in range(len(r)):
+        pos = r[i]
+        ran.append(np.arctan2(pos[1], pos[0]))
 
     return domain, ran
 
@@ -81,6 +95,8 @@ class Consumer:
         # multiple threads are making changes to this class
         # use a lock to prevent race conditions 
         self.lock = threading.Lock()
+        # only need actual. We will use the angle of link 2 about the z axis 
+        self.joint1_pos_act = [[],[]] 
 
         self.joint23_pos_est = []
         self.joint2_pos_act = [[],[]] # times, angles
@@ -136,6 +152,8 @@ class Consumer:
         self.lock.acquire()
         timestamp = time.time()
         # print(data.position)
+        self.joint1_pos_act[0].append(timestamp)
+        self.joint1_pos_act[1].append(data.position[0])
         self.joint2_pos_act[0].append(timestamp)
         self.joint2_pos_act[1].append(data.position[1])
         self.joint3_pos_act[0].append(timestamp)
@@ -155,6 +173,16 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("shutting down")
 
+
+    times, est_angle_j1 = joint1_angle(c.joint4_pos_est)
+    plt.figure()
+    plt.plot(times, est_angle_j1, 'b-', label="joint1 estimate")
+    plt.plot(c.joint1_pos_act[0], c.joint1_pos_act[1], 'r-', label="joint1 actual")
+    # plt.plot(times, c.ee_pos_act, 'g-')
+    plt.legend()
+    plt.xlabel("time (seconds)")
+    plt.ylabel("angle (radians)")
+    plt.show()
 
     times, est_angle_j2 = get_angles(c.joint23_pos_est, c.joint4_pos_est, 3.5, axis='x')
     plt.figure()

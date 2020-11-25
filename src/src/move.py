@@ -19,6 +19,10 @@ class Mover:
     """ implements the joint movements per joint for question 1 """
     def __init__(self):
         self.start = time.time()
+        self.joint1_pub = rospy.Publisher(
+                "/robot/joint1_position_controller/command",
+                Float64, queue_size=10
+                )
         self.joint2_pub = rospy.Publisher(
                 "/robot/joint2_position_controller/command",
                 Float64, queue_size=10
@@ -36,6 +40,9 @@ class Mover:
         self.joint3_angle = np.pi/18
         self.joint4_angle = np.pi/20
 
+    def joint1_position(self, t):
+        return Float64(np.pi*np.sin((np.pi/15)*t))
+
     def next_position(self, angle, t):
         """ calculate the next position given the angle scalar of a joint """
         return Float64((np.pi/2)*np.sin(angle*t))
@@ -43,6 +50,7 @@ class Mover:
     def move(self):
         """ publish the new angles for each joint """
         t = time.time()
+        self.joint1_pub.publish(self.joint1_position(t))
         self.joint2_pub.publish(self.next_position(self.joint2_angle, t))
         self.joint3_pub.publish(self.next_position(self.joint3_angle, t))
         self.joint4_pub.publish(self.next_position(self.joint4_angle, t))
