@@ -38,7 +38,7 @@ def get_htm (t1, t2, t3, t4):
                     np.array([R31, R32, R33, R34]), np.array([R41, R42, R43, R44])])
 
 # Test
-print(get_htm(0.0,1.5708,0.0,0.0))
+#print(get_htm(0.0,1.5708,0.0,0.0))
 
 
 
