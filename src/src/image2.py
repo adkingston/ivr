@@ -14,9 +14,10 @@ from cv_bridge import CvBridge, CvBridgeError
 from move import BLUE, RED, GREEN, YELLOW, ORANGE
 
 def pixel_to_meters(j1, j2, length):
-    x =  length/np.sqrt(np.sum((j1-j2)**2))
+    x = length / np.sqrt(np.sum((j1 - j2)**2))
     print(x)
     return x
+
 
 class image_converter:
 
@@ -40,7 +41,7 @@ class image_converter:
             'joint_1': {
                 'pos': np.array([0.0, 0.0, 0.0]),
                 'colour': YELLOW
-                },
+            },
             'joint_3': {
                 'pos': np.array([0.0, 0.0, 0.0]),
                 'colour': BLUE,
@@ -54,7 +55,7 @@ class image_converter:
                 'colour': RED,
                 }
             }
-
+        }
 
   # detect the joints
   def detect_joint_pos(self, image, joint_name):
@@ -147,17 +148,14 @@ class image_converter:
     except CvBridgeError as e:
       print(e)
 
-# call the class
 def main(args):
-  ic = image_converter()
-  try:
-    rospy.spin()
-  except KeyboardInterrupt:
-    print("Shutting down")
-  cv2.destroyAllWindows()
+    ic = image_converter()
+    try:
+        rospy.spin()
+    except KeyboardInterrupt:
+        print("Shutting down")
+    cv2.destroyAllWindows()
 
 # run the code if the node is called
 if __name__ == '__main__':
     main(sys.argv)
-
-
