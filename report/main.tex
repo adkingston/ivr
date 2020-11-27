@@ -1,6 +1,9 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1.5cm]{geometry}
 \usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{float}
+\usepackage{wrapfig}
 %\usepackage[compact]{titlesec}  
 %\titlespacing{\section}{0pt}{0pt}{0pt}
 %\titlespacing{\subsection}{0pt}{0pt}{0pt}
@@ -10,7 +13,7 @@
 \begin{center}
     IVR Assignment
 
-    B156771 \& [exam no. here]
+    B156771 \& B163370
 \end{center}
 %\maketitle
 \section{Vision}
@@ -127,4 +130,124 @@ While the angle between the joints may be moving as determined by their respecti
 This would result in the more flattened areas near the local extremes. 
 Furthermore, by rotating around the $z$ axis, the changes in the angle may not always be visible, depending on the degree to which joint 1 is rotated. 
 These two facts combines make it significantly more challenging to accurately determine the angle of the joints.
+
+\section{Robot Control}
+\subsection{Forward Kinematics}
+
+The robot in question is of type 4R spatial. Following are the DH parameters. The robot at its home position had few initial values.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|l|l|l|}
+Link \# & Aplha       & a   & d   & Theta    & Initial Joint Values \\\hline
+1       & 90 degrees  & 0.0 & 2.5 & Variable & 90 degrees           \\\hline
+2       & 90 degrees  & 0.0 & 0.0 & Variable & 90 degrees           \\\hline
+3       & -90 degrees & 3.5 & 0.0 & Variable & 0 degree             \\\hline
+4       & 0.0         & 3.0 & 0.0 & Variable & 0 degree             \\\hline    
+\end{tabular}
+\caption{DH parameters of the 4R spatial robot}
+\end{table}
+
+The translation co-ordinates from the homogeneous transformation matrix (HTM) of the robot are derived as below.
+
+\[
+\begin{bmatrix}
+    e_{x}       & \\
+    e_{y}       & \\
+    e_{z}       &
+\end{bmatrix}
+=
+\begin{bmatrix}
+c1c2c3c4l4+s1s3c4l4-c1s2s4l4+c1c2c3l3+s1s3l3 & \\
+s1c2c3c4l4-c1s3c4l4-s1s2s4l4+s1c2c3l3-c1s3l3 & \\
+s2c3c4l4+c2s4l4+s2c3l3+l1
+\end{bmatrix}
+\]
+
+At its home position when all the variable angles are 0.0 Radian the coordinates are derived as [0.0,0.0,9.0] which is correct as the end-effector is 9.0 units away along the Z axis.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{|l|l|l|l|l|l|}
+X\_htm & Y\_htm & Z\_htm & X\_cv & Y\_cv & Z\_cv  \\\hline
+5.44   & 1.63   & 1.87   & -0.62 & 5.69  & 5.56   \\\hline
+4.29   & 0.74   & 1      & -1.3  & 4.86  & 6.46   \\\hline
+3.91   & 3.57   & 0.38   & 0.28  & 6.2   & 3.3    \\\hline
+4.66   & 2.13   & -0.02  & 0.11  & 5.94  & 4.86   \\\hline
+3.69   & 4.31   & 1.87   & 0.44  & 5.82  & 2.53   \\\hline
+5.67   & 1.98   & 2.36   & 0.02  & 5.81  & 5.13   \\\hline
+5.67   & 0.66   & 2.33   & -1.04 & 5.51  & 5.77   \\\hline
+5.48   & 1.6    & 2.67   & -0.5  & 5.48  & 5.95   \\\hline
+5.66   & 0.44   & 1.87   & -1.46 & 5.49  & 5.6    \\\hline
+2.77   & 4.31   & -0.02  & 0.42  & 5.96  & 2.4    \\\hline
+\end{tabular}
+\caption{Comparison of the joint angles calculated by HTM and CV}
+\end{table}
+
+We observed discrepancies between the coordinates coming from two different calculations.
+
+\subsection{Closed-loop control}
+
+We derived the Jacobian of the robot from the translation co-ordinates calculated from the previous section. The error is calculated as the difference between the desired end-effector position (which in our case is the position of the Orange spherical object) and the current end-effector position. We tuned the P-Gain and D-Gain parameters to make the robot trajectory smoother as much as we could.
+
+Following are the different components of the derived Jacobian.
+
+\
+Effect of \textbf{joint1} velocity on end-effector velocity
+=
+\begin{bmatrix}
+-s1c2c3c4l4+c1s3c4l4+s1s2s4l4-s1c2c3l3+c1s3l3 & \\
+c1c2c3c4l4+s1s3c4l4-c1s2s4l4+c1c2c3l3+s1s3l3 & \\
+0.0
+\end{bmatrix}
+\
+
+\
+Effect of \textbf{joint2} velocity on end-effector velocity
+=
+\begin{bmatrix}
+-c1s2c3c4l4-c1c2s4l4-c1s2c3l3 & \\
+-s1s2c3c4l4-s1c2s4l4-s1s2c3l3 & \\
+c2c3c4l4-s2s4l4+c2c3l3
+\end{bmatrix}
+\
+
+\
+Effect of \textbf{joint3} velocity on end-effector velocity
+=
+\begin{bmatrix}
+-c1c2s3c4l4+s1c3c4l4-c1c2s3l3+s1c3l3 & \\
+-s1c2s3c4l4-c1c3c4l4-s1c2s3l3-c1c3l3 & \\
+-s2s3c4l4-s2s3l3
+\end{bmatrix}
+\
+
+\
+Effect of \textbf{joint4} velocity on end-effector velocity
+=
+\begin{bmatrix}
+-c1c2c3s4l4-s1s3s4l4-c1s2c4l4 & \\
+-s1c2c3s4l4+c1s3s4l4-s1s2c4l4 & \\
+-s2c3s4l4+c2c4l4
+\end{bmatrix}
+\
+
+Here is some text that will hopefully wrap around the figure! 
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Phasellus nibh sapien, finibus a nibh sit amet, finibus fringilla leo. Cras quam dui, pellentesque posuere turpis eget, accumsan commodo purus. Ut egestas nunc in est hendrerit, vel tincidunt justo semper. Praesent finibus suscipit viverra. Nam dui sem, dapibus aliquet dolor et, dignissim imperdiet diam. Sed sed metus porttitor, lobortis neque eget, posuere mauris. Suspendisse ornare lacus eu ligula congue cursus.
+\begin{wrapfigure}{l}{0.2\textwidth}
+\begin{center}
+\includegraphics[scale=0.5]{report/3d_frame.JPG}
+\caption{Frame Assignment Diagram}
+\end{center}
+\end{wrapfigure}
+Aenean eu sem congue, pellentesque ex sed, imperdiet magna. Nam a tristique sem. Praesent id accumsan ante. Donec tempor consectetur erat, porta malesuada massa blandit eu. Proin id vulputate elit. Donec quis arcu sit amet sapien vehicula blandit. Interdum et malesuada fames ac ante ipsum primis in faucibus. Fusce sapien enim, tempor a dapibus ut, porttitor et justo.
+
+Cras faucibus eleifend nulla, a vehicula ante fringilla sagittis. Quisque semper elit id est scelerisque, sollicitudin pretium est mattis. Morbi ultricies in elit nec vehicula. Morbi in magna vitae nulla egestas laoreet non sed ex. Quisque viverra eros nec nisl auctor, eu ultrices sapien vestibulum. Vestibulum et dolor malesuada, pharetra mi et, condimentum turpis. Morbi consequat volutpat facilisis. Aliquam justo augue, condimentum in tristique a, pulvinar vel purus. Quisque vestibulum odio non dui aliquet accumsan. Cras placerat bibendum nulla, ac tempor leo malesuada non. Etiam at mattis nulla.
+
+Morbi nec pretium lorem. Nulla hendrerit feugiat augue eu congue. Duis et diam in sapien volutpat egestas. Duis et nisl sit amet nulla bibendum vestibulum. Aliquam laoreet interdum lectus. Nam at ornare libero. Vivamus congue mollis eros sit amet faucibus. Suspendisse mollis orci at urna fermentum, volutpat mattis dui ornare. Sed sit amet libero est. Nam sollicitudin sapien at feugiat hendrerit. Pellentesque eu quam ligula. Maecenas pulvinar elit nunc, quis tempor lacus tincidunt nec. Duis ornare ornare elit, nec ullamcorper mi iaculis eu. Fusce venenatis sit amet erat ut aliquam. Mauris fringilla, neque nec sagittis faucibus, mauris augue mattis metus, sed sagittis ipsum orci vel metus. Quisque ac pulvinar justo.
+
+Cras lobortis elit ac blandit vulputate. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia curae; Morbi sit amet laoreet leo. Quisque dapibus augue in purus elementum scelerisque. Nam semper dui eu orci consequat tempor. Morbi lacus quam, fringilla sit amet suscipit quis, posuere vitae elit. Vestibulum eros orci, rhoncus nec imperdiet eu, aliquet vitae elit. Fusce aliquam tincidunt orci id posuere. 
+
+
 \end{document}
