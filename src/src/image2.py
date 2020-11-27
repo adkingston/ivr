@@ -14,9 +14,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from move import BLUE, RED, GREEN, YELLOW, ORANGE
 
 def pixel_to_meters(j1, j2, length):
-    x = length / np.sqrt(np.sum((j1 - j2)**2))
-    print(x)
-    return x
+    return length / np.sqrt(np.sum((j1 - j2)**2))
 
 
 class image_converter:
@@ -55,7 +53,6 @@ class image_converter:
                 'colour': RED,
                 }
             }
-        }
 
   # detect the joints
   def detect_joint_pos(self, image, joint_name):
@@ -128,7 +125,8 @@ class image_converter:
         'j1': j1_pos.tolist(),
         'j23': j3_pos.tolist(),
         'j4': j4_pos.tolist(),
-        'ee': ee_pos.tolist()
+        'ee': ee_pos.tolist(),
+        'target': target_pos.tolist(),
         })
 
     target_json = json.dumps({

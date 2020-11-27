@@ -10,39 +10,12 @@ import threading
 import numpy as np
 import numpy.linalg as la
 import matplotlib.pyplot as plt
-from std_msgs.msg import String
+from std_msgs.msg import String, Float64
 from sensor_msgs.msg import JointState
-
-def merge_streams(data, stream_store):
-   # if this point came in less than 0.05 seconds after the previous one
-   if len(stream_store) > 0 and data.data[0] - stream_store[-1][0] < 0.1:
-       if data.layout.dim[1].label == 'y':
-           stream_store[-1] = [
-                   stream_store[-1][0], 
-                   np.array([
-                       stream_store[-1][1][0], 
-                       data.data[1], 
-                       float((data.data[2] + stream_store[-1][1][2])/2)
-                   ])
-               ]
-       else:
-           stream_store[-1] = [
-                   stream_store[-1][0], 
-                   np.array([
-                       data.data[1], 
-                       stream_store[-1][1][1], 
-                       float((data.data[2] + stream_store[-1][1][2])/2)
-                   ])
-               ]
-       return False
-
-   else: 
-       if data.layout.dim[1].label == 'y':
-           stream_store.append([np.round(data.data[0], 2), np.array([0.0, data.data[1], data.data[2]])])
-       else:
-           stream_store.append([np.round(data.data[0], 2), np.array([data.data[1], 0.0, data.data[2]])])
-
-       return True
+from IVR_DH import get_htm
+from IVR_Jacobian import get_jacobian
+from IVR_Closed_PD import control_closed
+import move
 
 
 def pixel_to_meter(j1, j2, link_length): 
@@ -74,7 +47,26 @@ class Consumer:
 
         self.joint_sub = rospy.Subscriber('joints_est', String, self.callback)
         self.joint_pub = rospy.Publisher('joints_ang_est', JointState, queue_size=10)
+
+        self.ee_pub_x = rospy.Publisher('ee_x_est', Float64 , queue_size=10)
+        self.ee_pub_y = rospy.Publisher('ee_y_est', Float64 , queue_size=10)
+        self.ee_pub_z = rospy.Publisher('ee_z_est', Float64 , queue_size=10)
+        
+        # self.target_pub = rospy.Publisher('target_pos_est', JointState, queue_size=10)
         self.prev_msg = {}
+        self.prev_time = rospy.get_rostime().nsecs/1e9
+        self.error = 0.0 # initial error?
+        # need this to move the joints 
+        self.mover = move.Mover()
+
+    def perform_task_2(self, angles, ee_pos, target_pos, current_time):
+        # dh = get_htm(angles)
+        jac = get_jacobian(angles)
+        dt = current_time - self.prev_time
+        self.error, new_angles = control_closed(dt, ee_pos, target_pos, self.error, angles, jac)
+
+        # publish new angles 
+        self.mover.move_to(new_angles)
 
     def callback(self, data):
         data = json.loads(data.data)
@@ -88,14 +80,30 @@ class Consumer:
             self.prev_msg['j23'][ind] = data['j23'][ind]
             self.prev_msg['j4'][ind] = data['j4'][ind]
             self.prev_msg['ee'][ind] = data['ee'][ind]
+            self.prev_msg['target'][ind] = data['target'][ind]
 
             # calculate angles:
             angles = [
-                    -np.arctan2(self.prev_msg['j4'][1], self.prev_msg['j4'][0]),
+                    np.arctan2(self.prev_msg['j4'][1], self.prev_msg['j4'][0]),
                     get_angles(self.prev_msg['j23'], self.prev_msg['j4'], 'x'),
                     get_angles(self.prev_msg['j23'], self.prev_msg['j4'], 'y'),
                     get_angles(self.prev_msg['j4'], self.prev_msg['ee'], 'x')
                     ]
+
+            self.ee_pub_x.publish(Float64(self.prev_msg['ee'][0]))
+            self.ee_pub_y.publish(Float64(self.prev_msg['ee'][1]))
+            self.ee_pub_z.publish(Float64(self.prev_msg['ee'][2]))
+
+            # A = get_htm(angles)
+            # print(angles)
+            # print([A[0,3], A[1,3], A[2,3]])
+            self.perform_task_2(
+                    angles, 
+                    np.array(self.prev_msg['ee']), 
+                    np.array(self.prev_msg['target']), 
+                    self.prev_msg['time']['nsecs']/1e9
+                )
+            self.prev_time = data['time']['nsecs']/1e9
 
             msg = JointState()
             msg.position = angles

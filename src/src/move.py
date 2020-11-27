@@ -47,10 +47,16 @@ class Mover:
         """ calculate the next position given the angle scalar of a joint """
         return Float64((np.pi/2)*np.sin(angle*t))
 
-    def move(self):
+    def move(self, t):
         """ publish the new angles for each joint """
-        t = time.time()
         self.joint1_pub.publish(self.joint1_position(t))
         self.joint2_pub.publish(self.next_position(self.joint2_angle, t))
         self.joint3_pub.publish(self.next_position(self.joint3_angle, t))
         self.joint4_pub.publish(self.next_position(self.joint4_angle, t))
+
+    def move_to(self, angles):
+        t1, t2, t3, t4 = angles
+        self.joint1_pub.publish(t1)
+        self.joint2_pub.publish(t2)
+        self.joint3_pub.publish(t3)
+        self.joint4_pub.publish(t4)

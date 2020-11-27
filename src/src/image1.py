@@ -25,16 +25,10 @@ class image_converter:
     self.image_sub1 = rospy.Subscriber("/camera1/robot/image_raw",Image,self.callback1)
     # initialize the bridge between openCV and ROS
     self.bridge = CvBridge()
-
-    # need this to move the joints 
-    self.mover = move.Mover()
-
     # need this to track target
-
     self.template = cv2.imread("sphere_tmplt.png", 0)
     self.target_pub = rospy.Publisher('target_est', String, queue_size=10)
     self.joints_pub = rospy.Publisher('joints_est', String, queue_size=10)
-    # this will convert pixels to meters
 
     self.joints = {
             'joint_1': {
@@ -111,9 +105,7 @@ class image_converter:
     cv2.imshow('window1', self.cv_image1)
     cv2.waitKey(1)
     
-    self.mover.move()
     timestamp = rospy.get_rostime()
-    print(timestamp)
     j1_pos = self.detect_joint_pos(self.cv_image1, 'joint_1')
     j2_pos = self.detect_joint_pos(self.cv_image1, 'joint_2')
     j4_pos = self.detect_joint_pos(self.cv_image1, 'joint_4')
@@ -138,7 +130,8 @@ class image_converter:
         'j1': j1_pos.tolist(),
         'j23': j2_pos.tolist(),
         'j4': j4_pos.tolist(),
-        'ee': ee_pos.tolist()
+        'ee': ee_pos.tolist(),
+        'target': target_pos.tolist(),
         })
 
     target_json = json.dumps({

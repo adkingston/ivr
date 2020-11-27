@@ -2,7 +2,8 @@ import numpy as np
 from numpy import sin as s
 from numpy import cos as c
 
-def get_jacobian (t1, t2, t3, t4):
+def get_jacobian(angles):
+    t1, t2, t3, t4 = angles
 
     # Link lengths
     l1 = 2.5
