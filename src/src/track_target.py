@@ -2,9 +2,11 @@
 
 import time
 import rospy
+import json
 import threading
 import numpy as np
-from std_msgs.msg import Float64MultiArray, Float64
+from std_msgs.msg import String
+from sensor_msgs.msg import JointState
 import matplotlib.pyplot as plt
 
 
@@ -23,46 +25,41 @@ class TargetReader:
 
         self.target_est_sub = rospy.Subscriber(
             "target_est",
-            Float64MultiArray,
+            String,
             self.est_callback
         )
 
         self.target_pos_x_sub = rospy.Subscriber(
-            "target/x_position_controller/command",
-            Float64,
-            self.target_pos_callback(self.target_pos_x)
-        )
-        self.target_pos_y_sub = rospy.Subscriber(
-            "target/y_position_controller/command",
-            Float64,
-            self.target_pos_callback(self.target_pos_y)
-        )
-        self.target_pos_z_sub = rospy.Subscriber(
-            "target/z_position_controller/command",
-            Float64,
-            self.target_pos_callback(self.target_pos_z)
+            "target/joint_states",
+            JointState,
+            self.target_pos_callback
         )
 
-    def target_pos_callback(self, store):
-        def callback(data):
-            store[0].append(np.round(time.time(), 2))
-            store[1].append(data.data)
+    def target_pos_callback(self, data):
+        time = data.header.stamp.secs
+        self.target_pos_x[0].append(time)
+        self.target_pos_x[1].append(data.position[0])
+        self.target_pos_y[0].append(time)
+        self.target_pos_y[1].append(data.position[1])
+        self.target_pos_z[0].append(time)
+        self.target_pos_z[1].append(data.position[2])
 
-        return callback
 
     def est_callback(self, data):
-        if data.layout.dim[1].label == 'x':
-            self.target_est_x[0].append(np.round(data.data[0], 2))
-            self.target_est_x[1].append(data.data[1])
-        elif data.layout.dim[1].label == 'y':
+        data = json.loads(data.data)
+
+        if data['projection'] == 'xz':
+            self.target_est_x[0].append(np.float64(data['time']['secs']))
+            self.target_est_x[1].append(data['pos'][0])
+        elif data['projection'] == 'yz':
             print("here!!")
-            self.target_est_y[0].append(np.round(data.data[0], 2))
-            self.target_est_y[1].append(data.data[1])
+            self.target_est_y[0].append(np.float64(data['time']['secs']))
+            self.target_est_y[1].append(data['pos'][1])
         # if the time stamp is close enough to the previous addition, take
         # the average of the two as they correspond to the same reading
         # but from different projections
-            self.target_est_z[0].append(np.round(data.data[0], 2))
-            self.target_est_z[1].append(data.data[2])
+            self.target_est_z[0].append(np.float64(data['time']['secs']))
+            self.target_est_z[1].append(data['pos'][2])
 
     def make_plots(self):
         plt.figure()
